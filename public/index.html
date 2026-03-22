@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Отбор товаров Cults3D</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f2f5;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .stats {
+      font-size: 14px;
+      color: #666;
+    }
+
+    .reset-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .reset-btn:hover {
+      background: #c82333;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .card-content {
+      padding: 20px;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      color: #1a1a1a;
+    }
+
+    .price {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #2c3e50;
+      margin-bottom: 12px;
+    }
+
+    .images {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+      background: #f8f9fa;
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    .images img {
+      max-width: 200px;
+      max-height: 200px;
+      object-fit: contain;
+      background: white;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 4px;
+    }
+
+    .description {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .categories {
+      font-size: 14px;
+      color: #495057;
+      margin-bottom: 12px;
+    }
+
+    .tags {
+      margin-bottom: 20px;
+    }
+
+    .tag {
+      display: inline-block;
+      background: #e9ecef;
+      padding: 4px 8px;
+      border-radius: 16px;
+      margin-right: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #495057;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    button {
+      padding: 12px 24px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-add {
+      background: #28a745;
+      color: white;
+    }
+
+    .btn-add:hover {
+      background: #218838;
+    }
+
+    .btn-skip {
+      background: #6c757d;
+      color: white;
+    }
+
+    .btn-skip:hover {
+      background: #5a6268;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      font-size: 18px;
+      color: #666;
+    }
+
+    .progress-info {
+      background: #e9ecef;
+      padding: 8px 12px;
+      border-radius: 20px;
+      font-size: 14px;
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 12px;
+      color: #6c757d;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="header">
+      <div>
+        <h2>Отбор товаров Cults3D</h2>
+        <div class="stats" id="stats"></div>
+      </div>
+      <div>
+        <button class="reset-btn" id="resetBtn">Сбросить прогресс</button>
+      </div>
+    </div>
+
+    <div id="cardContainer" class="loading">Загрузка...</div>
+
+    <footer>
+      <div class="progress-info" id="progressInfo"></div>
+    </footer>
+  </div>
+
+  <script>
+    // Глобальные переменные
+    let allProducts = [];
+    let selectedProducts = [];       // выбранные товары (целиком)
+    let lastProcessedIndex = -1;     // индекс последнего обработанного товара (добавлен или пропущен)
+    let currentIndex = 0;            // индекс текущего отображаемого товара
+
+    const cardContainer = document.getElementById('cardContainer');
+    const statsSpan = document.getElementById('stats');
+    const progressInfo = document.getElementById('progressInfo');
+    const resetBtn = document.getElementById('resetBtn');
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function fixImagePath(p) {
+      if (!p) return '';
+      return '/' + p.replace(/\\/g, '/');
+    }
+
+    // Сохранение прогресса на сервер
+    async function saveProgress() {
+      try {
+        await fetch('/api/progress', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            selected: selectedProducts,
+            lastIndex: lastProcessedIndex
+          })
+        });
+      } catch (err) {
+        console.error('Ошибка сохранения прогресса:', err);
+      }
+    }
+
+    // Загрузка данных и прогресса
+    async function loadData() {
+      try {
+        const [productsRes, progressRes] = await Promise.all([
+          fetch('/api/products'),
+          fetch('/api/progress')
+        ]);
+        if (!productsRes.ok) throw new Error('Ошибка загрузки товаров');
+        allProducts = await productsRes.json();
+        const progress = await progressRes.json();
+        selectedProducts = progress.selected || [];
+        lastProcessedIndex = progress.lastIndex !== undefined ? progress.lastIndex : -1;
+
+        // Вычисляем индекс первого необработанного товара
+        if (lastProcessedIndex + 1 < allProducts.length) {
+          currentIndex = lastProcessedIndex + 1;
+        } else {
+          currentIndex = allProducts.length; // все обработаны
+        }
+
+        console.log(`Загружено: всего=${allProducts.length}, выбрано=${selectedProducts.length}, lastProcessed=${lastProcessedIndex}, current=${currentIndex}`);
+        updateStats();
+        renderCurrentCard();
+      } catch (err) {
+        cardContainer.innerHTML = `<div class="loading">Ошибка: ${err.message}</div>`;
+        console.error(err);
+      }
+    }
+
+    function updateStats() {
+      statsSpan.innerText = `Выбрано: ${selectedProducts.length} из ${allProducts.length}`;
+      if (currentIndex >= allProducts.length) {
+        progressInfo.innerText = 'Все товары обработаны!';
+      } else {
+        progressInfo.innerText = `Товар ${currentIndex + 1} из ${allProducts.length}`;
+      }
+    }
+
+    // Переход к следующему товару
+    function moveToNext() {
+      // Запоминаем, что текущий товар обработан
+      lastProcessedIndex = currentIndex;
+      // Сохраняем прогресс (с новым lastProcessedIndex)
+      saveProgress().then(() => {
+        // Увеличиваем индекс для следующего товара
+        currentIndex++;
+        if (currentIndex < allProducts.length) {
+          updateStats();
+          renderCurrentCard();
+        } else {
+          // Все товары обработаны
+          updateStats();
+          renderCurrentCard();
+        }
+      });
+    }
+
+    // Добавить товар
+    async function addProduct() {
+      if (currentIndex >= allProducts.length) return;
+      const product = allProducts[currentIndex];
+      selectedProducts.push(product);
+      // Переходим к следующему (сохранит прогресс)
+      moveToNext();
+    }
+
+    // Пропустить товар
+    async function skipProduct() {
+      if (currentIndex >= allProducts.length) return;
+      // Просто переходим к следующему, не добавляя товар
+      moveToNext();
+    }
+
+    // Отрисовка карточки текущего товара
+    function renderCurrentCard() {
+      if (currentIndex >= allProducts.length) {
+        cardContainer.innerHTML = `
+                <div class="card">
+                    <div class="card-content" style="text-align: center;">
+                        <h3>✅ Все товары обработаны!</h3>
+                        <button id="exportBtn" style="background: #007bff; color: white; margin-top: 20px;">Скачать Excel с выбранными товарами</button>
+                    </div>
+                </div>
+            `;
+        const exportBtn = document.getElementById('exportBtn');
+        if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
+        return;
+      }
+
+      const p = allProducts[currentIndex];
+      let imagesHtml = '';
+      if (p.localPaths && p.localPaths.length) {
+        p.localPaths.forEach(imgPath => {
+          if (imgPath) {
+            const url = fixImagePath(imgPath);
+            imagesHtml += `<img src="${url}" alt="photo" onerror="this.style.display='none'">`;
+          }
+        });
+      } else {
+        imagesHtml = '<div style="color: #999;">Нет локальных изображений</div>';
+      }
+
+      const tagsHtml = (p.tags && p.tags.length) ? p.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('') : '';
+
+      const cardHtml = `
+            <div class="card">
+                <div class="card-content">
+                    <div class="title">${escapeHtml(p.title)}</div>
+                    <div class="price">${escapeHtml(p.price)}</div>
+                    <div class="categories">Категории: ${escapeHtml(p.categories || '—')}</div>
+                    <div class="images">${imagesHtml}</div>
+                    <div class="description">${escapeHtml(p.description || '').replace(/\n/g, '<br>')}</div>
+                    <div class="tags">${tagsHtml}</div>
+                    <div class="buttons">
+                        <button class="btn-add" id="addBtn">✅ Добавить товар</button>
+                        <button class="btn-skip" id="skipBtn">⏭️ Пропустить</button>
+                    </div>
+                </div>
+            </div>
+        `;
+      cardContainer.innerHTML = cardHtml;
+
+      document.getElementById('addBtn').addEventListener('click', addProduct);
+      document.getElementById('skipBtn').addEventListener('click', skipProduct);
+    }
+
+    function exportToExcel() {
+      if (selectedProducts.length === 0) {
+        alert('Нет выбранных товаров.');
+        return;
+      }
+      const excelData = selectedProducts.map((p, idx) => ({
+        '№': idx + 1,
+        'Название': p.title || '',
+        'Ссылка на товар': p.productUrl || '',
+        'Цена': p.price || '',
+        'Главное изображение (ссылка)': p.mainImage || '',
+        'Локальные пути к фото': (p.localPaths || []).join('; '),
+        'Описание': p.description || '',
+        'Настройки печати': p.printSettings || '',
+        'Категории': p.categories || '',
+        'Теги': (p.tags || []).join(', ')
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(excelData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Выбранные товары');
+      XLSX.writeFile(wb, 'selected_products.xlsx');
+    }
+
+    async function resetProgress() {
+      if (confirm('Сбросить прогресс? Все выбранные товары будут удалены, и вы начнёте с начала.')) {
+        await fetch('/api/progress', { method: 'DELETE' });
+        // Перезагружаем данные
+        await loadData();
+      }
+    }
+
+    resetBtn.addEventListener('click', resetProgress);
+    loadData();
+  </script>
+</body>
+
+</html>
