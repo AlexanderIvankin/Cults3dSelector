@@ -2,9 +2,17 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const cors = require('cors');
+const basicAuth = require('express-basic-auth');
 
 const app = express();
 const PORT = 3000;
+
+// Настройка Basic Auth
+app.use(basicAuth({
+    users: { 'admin': process.env.SITE_PASSWORD || 'default_password' }, // логин admin, пароль из переменной окружения
+    challenge: true,           // посылать заголовок WWW-Authenticate
+    realm: 'Restricted Area'   // текст в диалоге
+}));
 
 app.use(cors());
 app.use(express.json());
