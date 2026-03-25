@@ -222,6 +222,8 @@
     let lastProcessedIndex = -1;
     let currentIndex = 0;
 
+    let currentPartNumber = null;
+
     const cardContainer = document.getElementById('cardContainer');
     const statsSpan = document.getElementById('stats');
     const progressInfo = document.getElementById('progressInfo');
@@ -268,6 +270,7 @@
         const progress = await progressRes.json();
         selectedProducts = progress.selected || [];
         lastProcessedIndex = progress.lastIndex !== undefined ? progress.lastIndex : -1;
+        currentPartNumber = progress.partNumber;
 
         if (lastProcessedIndex + 1 < allProducts.length) {
           currentIndex = lastProcessedIndex + 1;
@@ -440,7 +443,6 @@
         'Название': p.title || '',
         'Ссылка на товар': p.productUrl || '',
         'Цена': p.price || '',
-//        'Главное изображение (ссылка)': p.mainImage || '',
         'Локальные пути к фото': (p.localPaths || []).join('; '),
         'Описание': p.description || '',
         'Настройки печати': p.printSettings || '',
@@ -451,7 +453,8 @@
       const ws = XLSX.utils.json_to_sheet(excelData);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, 'Выбранные товары');
-      XLSX.writeFile(wb, 'selected_products.xlsx');
+      const fileName = `added_products_part${currentPartNumber || 'unknown'}.xlsx`;
+      XLSX.writeFile(wb, fileName);
     }
 
     async function resetProgress() {

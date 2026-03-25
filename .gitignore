@@ -1,6 +1,7 @@
 node_modules/
 /downloads
 /SplitProducts
+/SplitProgress
 *.xlsx~
 *.xls~
 ~$*.xlsx
