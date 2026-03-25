@@ -1,0 +1,41 @@
+
+// Обновление системы
+sudo apt update && sudo apt upgrade -y
+
+// Установка Node.js и npm (если не установлены)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+
+// Проверка версии Node.js и npm
+node -v
+npm -v
+
+// Создание папки для проекта
+mkdir -p /root/Cults3dSelector
+cd /root/Cults3dSelector
+
+// Установка пакетов
+npm init -y
+npm install express cors express-basic-auth async-mutex
+
+
+// Создание структуры папок
+mkdir -p public
+mkdir -p downloads
+mkdir -p SplitProducts   # сюда будут помещены папки part1, part2 и т.д.
+mkdir -p SplitProgress   # сюда будет складываться прогресс
+
+// Установка pm2 глобально и запуск приложения
+npm install -g pm2
+pm2 start server.js --name cults3d
+pm2 save
+pm2 startup
+
+// Настройка фаервола
+sudo ufw allow 3000/tcp
+
+// Команды для обновления файлов
+cd /root/Cults3dSelector
+npm install
+pm2 restart cults3d
+pm2 logs cults3d --lines 50
