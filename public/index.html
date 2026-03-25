@@ -288,9 +288,9 @@
       }
 
       // Отслеживание изменений в реальном времени
-      // if (currentIndex < allProducts.length) {
-      //   setTimeout(() => loadData(), 5000); // опрос каждые 5 секунд
-      // }
+      if (currentIndex < allProducts.length) {
+        setTimeout(() => loadData(), 5000); // опрос каждые 5 секунд
+      }
     }
 
     function updateStats() {
