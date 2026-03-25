@@ -283,6 +283,11 @@
         cardContainer.innerHTML = `<div class="loading">Ошибка: ${err.message}</div>`;
         console.error(err);
       }
+
+      // Отслеживание изменений в реальном времени
+      // if (currentIndex < allProducts.length) {
+      //   setTimeout(() => loadData(), 5000); // опрос каждые 5 секунд
+      // }
     }
 
     function updateStats() {
@@ -318,16 +323,66 @@
       });
     }
 
+    // Добавить товар
     async function addProduct() {
       if (currentIndex >= allProducts.length) return;
-      const product = allProducts[currentIndex];
-      selectedProducts.push(product);
-      moveToNext();
+      try {
+        const response = await fetch('/api/actions/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: currentIndex })
+        });
+        if (response.status === 409) {
+          // Конфликт: товар уже обработан кем-то другим – перезагружаем данные и повторяем попытку
+          await loadData();
+          // После перезагрузки currentIndex может измениться, повторяем действие
+          if (currentIndex < allProducts.length) {
+            return addProduct(); // рекурсивно пробуем снова (но осторожно, чтобы не зациклить)
+          }
+          return;
+        }
+        if (!response.ok) throw new Error('Ошибка добавления');
+        const data = await response.json();
+        // Обновляем локальные данные из ответа сервера
+        selectedProducts = data.progress.selected;
+        lastProcessedIndex = data.progress.lastIndex;
+        currentIndex = lastProcessedIndex + 1;
+        updateStats();
+        renderCurrentCard();
+      } catch (err) {
+        console.error('Ошибка добавления:', err);
+        // Можно показать сообщение пользователю
+        alert('Не удалось добавить товар. Попробуйте ещё раз.');
+      }
     }
 
+    // Пропустить товар
     async function skipProduct() {
       if (currentIndex >= allProducts.length) return;
-      moveToNext();
+      try {
+        const response = await fetch('/api/actions/skip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ index: currentIndex })
+        });
+        if (response.status === 409) {
+          await loadData();
+          if (currentIndex < allProducts.length) {
+            return skipProduct();
+          }
+          return;
+        }
+        if (!response.ok) throw new Error('Ошибка пропуска');
+        const data = await response.json();
+        selectedProducts = data.progress.selected;
+        lastProcessedIndex = data.progress.lastIndex;
+        currentIndex = lastProcessedIndex + 1;
+        updateStats();
+        renderCurrentCard();
+      } catch (err) {
+        console.error('Ошибка пропуска:', err);
+        alert('Не удалось пропустить товар. Попробуйте ещё раз.');
+      }
     }
 
     function renderCurrentCard() {
@@ -385,7 +440,7 @@
         'Название': p.title || '',
         'Ссылка на товар': p.productUrl || '',
         'Цена': p.price || '',
-        'Главное изображение (ссылка)': p.mainImage || '',
+//        'Главное изображение (ссылка)': p.mainImage || '',
         'Локальные пути к фото': (p.localPaths || []).join('; '),
         'Описание': p.description || '',
         'Настройки печати': p.printSettings || '',

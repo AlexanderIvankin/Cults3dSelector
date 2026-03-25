@@ -3,6 +3,8 @@ const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 const basicAuth = require("express-basic-auth");
+const { Mutex } = require("async-mutex");
+const progressMutex = new Mutex();
 
 const app = express();
 const PORT = 3000;
@@ -82,16 +84,15 @@ const PROGRESS_FILE = path.join(__dirname, `progress_part${partNumber}.json`);
 
 app.get("/api/products", (req, res) => {
   if (!fs.existsSync(jsonFile)) {
-    return res
-      .status(404)
-      .json({
-        error: `Файл products_with_local_part${partNumber}.json не найден`,
-      });
+    return res.status(404).json({
+      error: `Файл products_with_local_part${partNumber}.json не найден`,
+    });
   }
   const data = fs.readFileSync(jsonFile, "utf8");
   res.json(JSON.parse(data));
 });
 
+// Получение прогресса
 app.get("/api/progress", (req, res) => {
   if (fs.existsSync(PROGRESS_FILE)) {
     const data = fs.readFileSync(PROGRESS_FILE, "utf8");
@@ -101,18 +102,65 @@ app.get("/api/progress", (req, res) => {
   }
 });
 
-app.post("/api/progress", (req, res) => {
-  const { selected, lastIndex } = req.body;
-  fs.writeFileSync(
-    PROGRESS_FILE,
-    JSON.stringify({ selected, lastIndex }, null, 2),
-  );
-  console.log(
-    `Сохранён прогресс для part${partNumber}: lastIndex=${lastIndex}, selected=${selected.length}`,
-  );
-  res.json({ success: true });
+// Действие: добавить товар по индексу
+app.post("/api/actions/add", async (req, res) => {
+  const { index } = req.body; // индекс товара, который клиент хочет добавить
+  const release = await progressMutex.acquire();
+  try {
+    // Читаем текущий прогресс
+    let progress = { selected: [], lastIndex: -1 };
+    if (fs.existsSync(PROGRESS_FILE)) {
+      progress = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+    }
+    // Проверяем, что индекс ещё не обработан
+    if (progress.lastIndex >= index) {
+      return res.status(409).json({ error: "Товар уже обработан" });
+    }
+    // Загружаем все товары
+    const products = JSON.parse(fs.readFileSync(jsonFile, "utf8"));
+    if (index >= products.length) {
+      return res.status(400).json({ error: "Неверный индекс" });
+    }
+    const product = products[index];
+    // Добавляем товар, если его ещё нет (защита от дублирования)
+    const alreadySelected = progress.selected.some(
+      (p) => p.productUrl === product.productUrl,
+    );
+    if (!alreadySelected) {
+      progress.selected.push(product);
+    }
+    // Обновляем lastIndex на текущий индекс (или можно на index, если хотим последовательную обработку)
+    progress.lastIndex = index;
+    // Сохраняем
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+    res.json({ success: true, progress });
+  } finally {
+    release();
+  }
 });
 
+// Действие: пропустить товар по индексу
+app.post("/api/actions/skip", async (req, res) => {
+  const { index } = req.body;
+  const release = await progressMutex.acquire();
+  try {
+    let progress = { selected: [], lastIndex: -1 };
+    if (fs.existsSync(PROGRESS_FILE)) {
+      progress = JSON.parse(fs.readFileSync(PROGRESS_FILE, "utf8"));
+    }
+    if (progress.lastIndex >= index) {
+      return res.status(409).json({ error: "Товар уже обработан" });
+    }
+    // Просто обновляем lastIndex
+    progress.lastIndex = index;
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
+    res.json({ success: true, progress });
+  } finally {
+    release();
+  }
+});
+
+// Сброс прогресса
 app.delete("/api/progress", (req, res) => {
   if (fs.existsSync(PROGRESS_FILE)) fs.unlinkSync(PROGRESS_FILE);
   res.json({ success: true });
