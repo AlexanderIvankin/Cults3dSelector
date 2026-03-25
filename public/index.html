@@ -222,6 +222,8 @@
     let lastProcessedIndex = -1;
     let currentIndex = 0;
 
+    let eventSource = null;
+
     let currentPartNumber = null;
 
     const cardContainer = document.getElementById('cardContainer');
@@ -242,21 +244,6 @@
     function fixImagePath(p) {
       if (!p) return '';
       return '/' + p.replace(/\\/g, '/');
-    }
-
-    async function saveProgress() {
-      try {
-        await fetch('/api/progress', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            selected: selectedProducts,
-            lastIndex: lastProcessedIndex
-          })
-        });
-      } catch (err) {
-        console.error('Ошибка сохранения прогресса:', err);
-      }
     }
 
     async function loadData() {
@@ -286,11 +273,23 @@
         cardContainer.innerHTML = `<div class="loading">Ошибка: ${err.message}</div>`;
         console.error(err);
       }
+    }
 
-      // Отслеживание изменений в реальном времени
-      if (currentIndex < allProducts.length) {
-        setTimeout(() => loadData(), 5000); // опрос каждые 5 секунд
-      }
+    function connectEvents() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/events');
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'progress-updated') {
+          console.log('Получено обновление прогресса');
+          loadData(); // перезагрузить данные и обновить интерфейс
+        }
+      };
+      eventSource.onerror = (err) => {
+        console.error('SSE ошибка, переподключение через 5 сек', err);
+        eventSource.close();
+        setTimeout(connectEvents, 5000);
+      };
     }
 
     function updateStats() {
@@ -308,22 +307,6 @@
       } else {
         actionButtonsDiv.style.display = 'none';
       }
-    }
-
-    function moveToNext() {
-      lastProcessedIndex = currentIndex;
-      saveProgress().then(() => {
-        currentIndex++;
-        if (currentIndex < allProducts.length) {
-          updateStats();
-          renderCurrentCard();
-          updateActionButtonsVisibility();
-        } else {
-          updateStats();
-          renderCurrentCard();
-          updateActionButtonsVisibility();
-        }
-      });
     }
 
     // Добавить товар
@@ -460,7 +443,6 @@
     async function resetProgress() {
       if (confirm('Сбросить прогресс? Все выбранные товары будут удалены, и вы начнёте с начала.')) {
         await fetch('/api/progress', { method: 'DELETE' });
-        await loadData();
       }
     }
 
@@ -469,6 +451,7 @@
     document.getElementById('skipBtn').addEventListener('click', skipProduct);
     resetBtn.addEventListener('click', resetProgress);
     loadData();
+    connectEvents();
   </script>
 </body>
 

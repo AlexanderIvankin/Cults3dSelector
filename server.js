@@ -20,6 +20,34 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
+const clients = [];
+// Endpoint для SSE
+app.get("/api/events", (req, res) => {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.write("retry: 10000\n\n");
+
+  const clientId = Date.now();
+  const newClient = { id: clientId, res };
+  clients.push(newClient);
+  console.log(`SSE client connected, total: ${clients.length}`);
+
+  req.on("close", () => {
+    const index = clients.findIndex((c) => c.id === clientId);
+    if (index !== -1) clients.splice(index, 1);
+    console.log(`SSE client disconnected, total: ${clients.length}`);
+  });
+});
+
+function broadcastUpdate() {
+  const data = `data: ${JSON.stringify({ type: "progress-updated" })}\n\n`;
+  clients.forEach((client) => client.res.write(data));
+  console.log(`Broadcasted progress update to ${clients.length} clients`);
+}
+
 // Определение части
 const splitRoot = path.join(__dirname, "SplitProducts");
 let partNumber = process.env.PART_NUMBER || null;
@@ -126,6 +154,7 @@ app.post("/api/actions/add", async (req, res) => {
     progress.lastIndex = index;
     fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
     res.json({ success: true, progress });
+    broadcastUpdate();
   } finally {
     release();
   }
@@ -145,6 +174,7 @@ app.post("/api/actions/skip", async (req, res) => {
     progress.lastIndex = index;
     fs.writeFileSync(PROGRESS_FILE, JSON.stringify(progress, null, 2));
     res.json({ success: true, progress });
+    broadcastUpdate();
   } finally {
     release();
   }
@@ -153,6 +183,7 @@ app.post("/api/actions/skip", async (req, res) => {
 app.delete("/api/progress", (req, res) => {
   if (fs.existsSync(PROGRESS_FILE)) fs.unlinkSync(PROGRESS_FILE);
   res.json({ success: true });
+  broadcastUpdate();
 });
 
 app.listen(PORT, "0.0.0.0", () => {
