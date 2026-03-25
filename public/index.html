@@ -29,28 +29,24 @@
       border-radius: 8px;
       margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
     }
 
     .stats {
       font-size: 14px;
       color: #666;
+      margin-top: 8px;
     }
 
-    .reset-btn {
-      background: #dc3545;
-      color: white;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-
-    .reset-btn:hover {
-      background: #c82333;
+    /* Блок с кнопками действия (над карточкой) */
+    .action-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-bottom: 20px;
+      background: white;
+      padding: 16px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
 
     .card {
@@ -75,7 +71,7 @@
       font-size: 1.2rem;
       font-weight: bold;
       color: #2c3e50;
-      margin-bottom: 12px;
+      margin-bottom: 16px;
     }
 
     .images {
@@ -130,12 +126,6 @@
       color: #495057;
     }
 
-    .buttons {
-      display: flex;
-      gap: 12px;
-      margin-top: 16px;
-    }
-
     button {
       padding: 12px 24px;
       font-size: 16px;
@@ -163,6 +153,19 @@
       background: #5a6268;
     }
 
+    .reset-btn {
+      background: #dc3545;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .reset-btn:hover {
+      background: #c82333;
+    }
+
     .loading {
       text-align: center;
       padding: 40px;
@@ -175,11 +178,16 @@
       padding: 8px 12px;
       border-radius: 20px;
       font-size: 14px;
+      display: inline-block;
     }
 
     footer {
       text-align: center;
       margin-top: 30px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
       font-size: 12px;
       color: #6c757d;
     }
@@ -189,33 +197,36 @@
 <body>
   <div class="container">
     <div class="header">
-      <div>
-        <h2>Отбор товаров Cults3D</h2>
-        <div class="stats" id="stats"></div>
-      </div>
-      <div>
-        <button class="reset-btn" id="resetBtn">Сбросить прогресс</button>
-      </div>
+      <h2>Отбор товаров Cults3D</h2>
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <!-- Блок с кнопками действий (отдельно, всегда на одном месте) -->
+    <div id="actionButtons" class="action-buttons" style="display: none;">
+      <button class="btn-add" id="addBtn">✅ Добавить товар</button>
+      <button class="btn-skip" id="skipBtn">⏭️ Пропустить</button>
     </div>
 
     <div id="cardContainer" class="loading">Загрузка...</div>
 
     <footer>
       <div class="progress-info" id="progressInfo"></div>
+      <button class="reset-btn" id="resetBtn">Сбросить прогресс</button>
     </footer>
   </div>
 
   <script>
     // Глобальные переменные
     let allProducts = [];
-    let selectedProducts = [];       // выбранные товары (целиком)
-    let lastProcessedIndex = -1;     // индекс последнего обработанного товара (добавлен или пропущен)
-    let currentIndex = 0;            // индекс текущего отображаемого товара
+    let selectedProducts = [];
+    let lastProcessedIndex = -1;
+    let currentIndex = 0;
 
     const cardContainer = document.getElementById('cardContainer');
     const statsSpan = document.getElementById('stats');
     const progressInfo = document.getElementById('progressInfo');
     const resetBtn = document.getElementById('resetBtn');
+    const actionButtonsDiv = document.getElementById('actionButtons');
 
     function escapeHtml(str) {
       if (!str) return '';
@@ -231,7 +242,6 @@
       return '/' + p.replace(/\\/g, '/');
     }
 
-    // Сохранение прогресса на сервер
     async function saveProgress() {
       try {
         await fetch('/api/progress', {
@@ -247,7 +257,6 @@
       }
     }
 
-    // Загрузка данных и прогресса
     async function loadData() {
       try {
         const [productsRes, progressRes] = await Promise.all([
@@ -260,16 +269,16 @@
         selectedProducts = progress.selected || [];
         lastProcessedIndex = progress.lastIndex !== undefined ? progress.lastIndex : -1;
 
-        // Вычисляем индекс первого необработанного товара
         if (lastProcessedIndex + 1 < allProducts.length) {
           currentIndex = lastProcessedIndex + 1;
         } else {
-          currentIndex = allProducts.length; // все обработаны
+          currentIndex = allProducts.length;
         }
 
         console.log(`Загружено: всего=${allProducts.length}, выбрано=${selectedProducts.length}, lastProcessed=${lastProcessedIndex}, current=${currentIndex}`);
         updateStats();
         renderCurrentCard();
+        updateActionButtonsVisibility();
       } catch (err) {
         cardContainer.innerHTML = `<div class="loading">Ошибка: ${err.message}</div>`;
         console.error(err);
@@ -285,52 +294,52 @@
       }
     }
 
-    // Переход к следующему товару
+    function updateActionButtonsVisibility() {
+      if (currentIndex < allProducts.length) {
+        actionButtonsDiv.style.display = 'flex';
+      } else {
+        actionButtonsDiv.style.display = 'none';
+      }
+    }
+
     function moveToNext() {
-      // Запоминаем, что текущий товар обработан
       lastProcessedIndex = currentIndex;
-      // Сохраняем прогресс (с новым lastProcessedIndex)
       saveProgress().then(() => {
-        // Увеличиваем индекс для следующего товара
         currentIndex++;
         if (currentIndex < allProducts.length) {
           updateStats();
           renderCurrentCard();
+          updateActionButtonsVisibility();
         } else {
-          // Все товары обработаны
           updateStats();
           renderCurrentCard();
+          updateActionButtonsVisibility();
         }
       });
     }
 
-    // Добавить товар
     async function addProduct() {
       if (currentIndex >= allProducts.length) return;
       const product = allProducts[currentIndex];
       selectedProducts.push(product);
-      // Переходим к следующему (сохранит прогресс)
       moveToNext();
     }
 
-    // Пропустить товар
     async function skipProduct() {
       if (currentIndex >= allProducts.length) return;
-      // Просто переходим к следующему, не добавляя товар
       moveToNext();
     }
 
-    // Отрисовка карточки текущего товара
     function renderCurrentCard() {
       if (currentIndex >= allProducts.length) {
         cardContainer.innerHTML = `
-                <div class="card">
-                    <div class="card-content" style="text-align: center;">
-                        <h3>✅ Все товары обработаны!</h3>
-                        <button id="exportBtn" style="background: #007bff; color: white; margin-top: 20px;">Скачать Excel с выбранными товарами</button>
-                    </div>
-                </div>
-            `;
+          <div class="card">
+            <div class="card-content" style="text-align: center;">
+              <h3>✅ Все товары обработаны!</h3>
+              <button id="exportBtn" style="background: #007bff; color: white; margin-top: 20px;">Скачать Excel с выбранными товарами</button>
+            </div>
+          </div>
+        `;
         const exportBtn = document.getElementById('exportBtn');
         if (exportBtn) exportBtn.addEventListener('click', exportToExcel);
         return;
@@ -352,25 +361,18 @@
       const tagsHtml = (p.tags && p.tags.length) ? p.tags.map(tag => `<span class="tag">${escapeHtml(tag)}</span>`).join('') : '';
 
       const cardHtml = `
-            <div class="card">
-                <div class="card-content">
-                    <div class="title">${escapeHtml(p.title)}</div>
-                    <div class="price">${escapeHtml(p.price)}</div>
-                    <div class="categories">Категории: ${escapeHtml(p.categories || '—')}</div>
-                    <div class="images">${imagesHtml}</div>
-                    <div class="description">${escapeHtml(p.description || '').replace(/\n/g, '<br>')}</div>
-                    <div class="tags">${tagsHtml}</div>
-                    <div class="buttons">
-                        <button class="btn-add" id="addBtn">✅ Добавить товар</button>
-                        <button class="btn-skip" id="skipBtn">⏭️ Пропустить</button>
-                    </div>
-                </div>
-            </div>
-        `;
+        <div class="card">
+          <div class="card-content">
+            <div class="title">${escapeHtml(p.title)}</div>
+            <div class="price">${escapeHtml(p.price)}</div>
+            <div class="categories">Категории: ${escapeHtml(p.categories || '—')}</div>
+            <div class="images">${imagesHtml}</div>
+            <div class="description">${escapeHtml(p.description || '').replace(/\n/g, '<br>')}</div>
+            <div class="tags">${tagsHtml}</div>
+          </div>
+        </div>
+      `;
       cardContainer.innerHTML = cardHtml;
-
-      document.getElementById('addBtn').addEventListener('click', addProduct);
-      document.getElementById('skipBtn').addEventListener('click', skipProduct);
     }
 
     function exportToExcel() {
@@ -400,11 +402,13 @@
     async function resetProgress() {
       if (confirm('Сбросить прогресс? Все выбранные товары будут удалены, и вы начнёте с начала.')) {
         await fetch('/api/progress', { method: 'DELETE' });
-        // Перезагружаем данные
         await loadData();
       }
     }
 
+    // Привязываем обработчики к кнопкам в блоке actionButtons
+    document.getElementById('addBtn').addEventListener('click', addProduct);
+    document.getElementById('skipBtn').addEventListener('click', skipProduct);
     resetBtn.addEventListener('click', resetProgress);
     loadData();
   </script>
